@@ -6,9 +6,11 @@ import os
 import argparse
 from PIL import Image, ImageDraw, ImageFont
 import time
+import requests
 plate_color_list=['黑色','蓝色','绿色','白色','黄色']
 plateName=r"#京沪津渝冀晋蒙辽吉黑苏浙皖闽赣鲁豫鄂湘粤桂琼川贵云藏陕甘青宁新学警港澳挂使领民航危0123456789ABCDEFGHJKLMNPQRSTUVWXYZ险品"
 mean_value,std_value=((0.588,0.193))#识别模型均值标准差
+clors = [(255,0,0),(0,255,0),(0,0,255),(255,255,0),(0,255,255)]
 
 def decodePlate(preds):        #识别后处理
     pre=0
@@ -216,41 +218,101 @@ def draw_result(orgimg,dict_list):
     print(result_str)
     return orgimg
 
-if __name__ == "__main__":
-    begin = time.time()
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--detect_model',type=str, default=r'weights/plate_detect.onnx', help='model.pt path(s)')  #检测模型
-    parser.add_argument('--rec_model', type=str, default='weights/plate_rec_color.onnx', help='model.pt path(s)')#识别模型
-    parser.add_argument('--image_path', type=str, default='imgs', help='source') 
-    parser.add_argument('--img_size', type=int, default=640, help='inference size (pixels)')
-    parser.add_argument('--output', type=str, default='result1', help='source') 
-    opt = parser.parse_args()
-    file_list = []
-    allFilePath(opt.image_path,file_list)
-    providers =  ['CPUExecutionProvider']
-    clors = [(255,0,0),(0,255,0),(0,0,255),(255,255,0),(0,255,255)]
-    img_size = (opt.img_size,opt.img_size)
-    session_detect = onnxruntime.InferenceSession(opt.detect_model, providers=providers )
-    session_rec = onnxruntime.InferenceSession(opt.rec_model, providers=providers )
-    if not os.path.exists(opt.output):
-        os.mkdir(opt.output)
-    save_path = opt.output
-    count = 0
-    for pic_ in file_list:
-        count+=1
-        print(count,pic_,end=" ")
-        img=cv2.imread(pic_)
+
+class PlateRecognizer:
+    def __init__(self, detect_model, rec_model, img_size=640, output='./output'):
+        self.detect_model = detect_model
+        self.rec_model = rec_model
+        self.img_size = img_size
+        self.output = output
+        self.providers = ['CPUExecutionProvider']
+        
+        # Initialize models
+        self.session_detect = onnxruntime.InferenceSession(self.detect_model, providers=self.providers)
+        self.session_rec = onnxruntime.InferenceSession(self.rec_model, providers=self.providers)
+        
+        if not os.path.exists(self.output):
+            os.makedirs(self.output)
+
+    def infer_single_image(self, image_path ):
+        """ Perform inference on a single image. """
+        start_time = time.time()
+
+        # img = cv2.imread(image_path)
+        response = requests.get(image_path)
+        image_data = np.asarray(bytearray(response.content), dtype="uint8")
+        # Decode the image into an OpenCV format
+        img = cv2.imdecode(image_data, cv2.IMREAD_COLOR)
+        
         img0 = copy.deepcopy(img)
-        img,r,left,top = detect_pre_precessing(img,img_size) #检测前处理
-        # print(img.shape)
-        y_onnx = session_detect.run([session_detect.get_outputs()[0].name], {session_detect.get_inputs()[0].name: img})[0]
-        outputs = post_precessing(y_onnx,r,left,top) #检测后处理
-        result_list=rec_plate(outputs,img0,session_rec)
-        ori_img = draw_result(img0,result_list)
-        img_name = os.path.basename(pic_)
-        save_img_path = os.path.join(save_path,img_name)
-        cv2.imwrite(save_img_path,ori_img)
-    print(f"总共耗时{time.time()-begin} s")
+        img, r, left, top = detect_pre_precessing(img, (self.img_size, self.img_size))  # Detection preprocessing
+        
+        # Run detection model
+        y_onnx = self.session_detect.run([self.session_detect.get_outputs()[0].name], 
+                                        {self.session_detect.get_inputs()[0].name: img})[0]
+        
+        # Post-process detection output
+        outputs = post_precessing(y_onnx, r, left, top)
+        
+        # Recognize plate
+        result_list = rec_plate(outputs, img0, self.session_rec)
+        print(f"Inference completed for {image_path}, time taken: {time.time() - start_time:.2f} seconds")
+        return result_list
+
+
+# Example usage
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--detect_model', type=str, default='weights/plate_detect.onnx', help='Detection model path')
+    parser.add_argument('--rec_model', type=str, default='weights/plate_rec_color.onnx', help='Recognition model path')
+    parser.add_argument('--image_path', type=str, default='https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTlnyADaZLLO3EWBJAGMEShLl18rnSNr8qbig&s', help='Image path')
+    parser.add_argument('--img_size', type=int, default=640, help='Input image size')
+    parser.add_argument('--output', type=str, default='./output', help='Output folder path')
+    args = parser.parse_args()
+
+    # Create PlateRecognizer instance
+    plate_recognizer = PlateRecognizer(args.detect_model, args.rec_model, args.img_size, args.output)
+    # import pdb;pdb.set_trace()
+    # Perform inference on a single image
+    result_list = plate_recognizer.infer_single_image(args.image_path)
+    print(result_list)
+
+
+# if __name__ == "__main__":
+#     begin = time.time()
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument('--detect_model',type=str, default=r'weights/plate_detect.onnx', help='model.pt path(s)')  #检测模型
+#     parser.add_argument('--rec_model', type=str, default='weights/plate_rec_color.onnx', help='model.pt path(s)')#识别模型
+#     parser.add_argument('--image_path', type=str, default='imgs', help='source') 
+#     parser.add_argument('--img_size', type=int, default=640, help='inference size (pixels)')
+#     parser.add_argument('--output', type=str, default='result1', help='source') 
+#     opt = parser.parse_args()
+#     file_list = []
+#     allFilePath(opt.image_path,file_list)
+#     providers =  ['CPUExecutionProvider']
+#     clors = [(255,0,0),(0,255,0),(0,0,255),(255,255,0),(0,255,255)]
+#     img_size = (opt.img_size,opt.img_size)
+#     session_detect = onnxruntime.InferenceSession(opt.detect_model, providers=providers )
+#     session_rec = onnxruntime.InferenceSession(opt.rec_model, providers=providers )
+#     if not os.path.exists(opt.output):
+#         os.mkdir(opt.output)
+#     save_path = opt.output
+#     count = 0
+#     for pic_ in file_list:
+#         count+=1
+#         print(count,pic_,end=" ")
+#         img=cv2.imread(pic_)
+#         img0 = copy.deepcopy(img)
+#         img,r,left,top = detect_pre_precessing(img,img_size) #检测前处理
+#         # print(img.shape)
+#         y_onnx = session_detect.run([session_detect.get_outputs()[0].name], {session_detect.get_inputs()[0].name: img})[0]
+#         outputs = post_precessing(y_onnx,r,left,top) #检测后处理
+#         result_list=rec_plate(outputs,img0,session_rec)
+#         ori_img = draw_result(img0,result_list)
+#         img_name = os.path.basename(pic_)
+#         save_img_path = os.path.join(save_path,img_name)
+#         cv2.imwrite(save_img_path,ori_img)
+#     print(f"总共耗时{time.time()-begin} s")
     
 
         
