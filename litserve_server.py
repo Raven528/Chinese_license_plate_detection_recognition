@@ -1,4 +1,4 @@
-from onnx_infer import PlateRecognizer
+from infers.onnx_infer import PlateRecognizer
 import litserve as ls
 import argparse
 

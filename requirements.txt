@@ -45,3 +45,5 @@ traitlets
 typing-extensions
 urllib3
 wcwidth
+litserve
+onnxruntime
