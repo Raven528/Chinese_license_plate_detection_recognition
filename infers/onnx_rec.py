@@ -6,6 +6,7 @@ import os
 import argparse
 from PIL import Image, ImageDraw, ImageFont
 import sys
+from scipy.special import softmax
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(project_root)
@@ -17,18 +18,21 @@ plateName=r"#京沪津渝冀晋蒙辽吉黑苏浙皖闽赣鲁豫鄂湘粤桂琼�
 mean_value,std_value=((0.588,0.193))#识别模型均值标准差
 clors = [(255,0,0),(0,255,0),(0,0,255),(255,255,0),(0,255,255)]
 
-def decodePlate(preds):        #识别后处理
-    pre=0
-    newPreds=[]
+def decodePlate(preds, y_onnx_plate):
+    pre = 0
+    newPreds = []
+    char_scores = []
     for i in range(len(preds)):
-        if preds[i]!=0 and preds[i]!=pre:
+        if preds[i] != 0 and preds[i] != pre:
             newPreds.append(preds[i])
-        pre=preds[i]
-    plate=""
-    for i in newPreds:
-        plate+=plateName[int(i)]
-    return plate
-    # return newPreds
+            char_scores.append(max(softmax(y_onnx_plate[i])))
+        pre = preds[i]
+    
+    plate = ""
+    for i, char_idx in enumerate(newPreds):
+        plate += plateName[int(char_idx)]
+    
+    return plate, char_scores
 
 def rec_pre_precessing(img,size=(48,168)): #识别前处理
     img =cv2.resize(img,(168,48))
@@ -37,17 +41,6 @@ def rec_pre_precessing(img,size=(48,168)): #识别前处理
     img = img.transpose(2,0,1)         #h,w,c 转为 c,h,w
     img = img.reshape(1,*img.shape)    #channel,height,width转为batch,channel,height,channel
     return img
-
-def get_plate_result(img,session_rec): #识别后处理
-    img =rec_pre_precessing(img)
-    y_onnx_plate,y_onnx_color = session_rec.run([session_rec.get_outputs()[0].name,session_rec.get_outputs()[1].name], {session_rec.get_inputs()[0].name: img})
-    index =np.argmax(y_onnx_plate,axis=-1)
-    index_color = np.argmax(y_onnx_color)
-    plate_color = plate_color_list[index_color]
-    # print(y_onnx[0])
-    plate_no = decodePlate(index[0])
-    return plate_no,plate_color
-
 
 def get_split_merge(img):  #双层车牌进行分割后识别
     h,w,c = img.shape
@@ -75,11 +68,26 @@ class PlateRecognizer:
             img, session_rec = roi_img, self.session_rec
             img =rec_pre_precessing(img)
             y_onnx_plate,y_onnx_color = session_rec.run([session_rec.get_outputs()[0].name,session_rec.get_outputs()[1].name], {session_rec.get_inputs()[0].name: img})
-            import pdb;pdb.set_trace()
-            index =np.argmax(y_onnx_plate,axis=-1)
-            index_color = np.argmax(y_onnx_color)
+            # import pdb;pdb.set_trace()
+            # 获取车牌字符的索引及其最大概率
+            index = np.argmax(y_onnx_plate, axis=-1)  # 每个字符的预测索引
+
+            # 获取车牌颜色的索引及其最大概率
+            index_color = np.argmax(y_onnx_color)  # 颜色预测索引
+            color_prob = max(softmax(y_onnx_color[0]))  # 颜色预测的最大概率
+
+            # 获取车牌颜色名称
             plate_color = plate_color_list[index_color]
-            plate_no = decodePlate(index[0])
+
+            # 解码车牌号码
+            plate_no, char_probs = decodePlate(index[0], y_onnx_plate[0])
+
+            # 打印车牌信息
+            print("车牌号码:", plate_no)
+            print("车牌每个字符的预测概率:", char_probs)
+            print("车牌颜色:", plate_color)
+            print("车牌颜色预测的概率:", color_prob)
+ 
 
         #     # Save result details
         #     result_dict['rect'] = rect
@@ -107,6 +115,6 @@ if __name__ == "__main__":
     
     # Perform inference on a single image
     det_result = plate_detector.predict(cv2.imread(args.image_path))
-    result_image, plate_texts = plate_recognizer.predict(det_result)
+    plate_recognizer.predict(det_result)
 
         
