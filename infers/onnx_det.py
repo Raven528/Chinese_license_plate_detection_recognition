@@ -190,6 +190,6 @@ if __name__ == "__main__":
     plate_detector = PlateDetector(args.model_dir, args.img_size)
     
     # Perform inference on a single image
-    _,_,_,plate_texts = plate_detector.predict(cv2.imread(args.image_path))
-    print(plate_texts)
+    _,_,_,_,scores = plate_detector.predict(cv2.imread(args.image_path))
+    print(scores)
 

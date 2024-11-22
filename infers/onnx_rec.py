@@ -97,7 +97,7 @@ class PlateRecognizer:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_dir', type=str, default='weights', help='Recognition model path')
-    parser.add_argument('--image_path', type=str, default='/data/fuhu.gu/workspace/github/Chinese_license_plate_detection_recognition/imgs/0a39b96d-8278-436a-9e01-543592c4fef2.jpg', help='Image path')
+    parser.add_argument('--image_path', type=str, default='imgs/moto.png', help='Image path')
     parser.add_argument('--img_size', type=int, default=640, help='Input image size')
     args = parser.parse_args()
     # Create PlateRecognizer instance
