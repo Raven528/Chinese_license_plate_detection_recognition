@@ -59,46 +59,37 @@ class PlateRecognizer:
         self.session_rec = onnxruntime.InferenceSession(self.rec_model, providers=self.providers)
  
     def predict(self, det_results):
-        rects,landmarks,labels,scores,roi_imgs = det_results
-        for rect, landmark, label, score, roi_img in zip(rects, landmarks, labels, scores, roi_imgs):
-            
+        rec_results = []
+        for result in det_results:
+            label = result["label"]
+            roi_img = result["roi_img"]
+
+            rec_result = {}
             if label == 1:  # Dual-layer plate
                 roi_img = get_split_merge(roi_img)
             # Get plate results
             img, session_rec = roi_img, self.session_rec
             img =rec_pre_precessing(img)
             y_onnx_plate,y_onnx_color = session_rec.run([session_rec.get_outputs()[0].name,session_rec.get_outputs()[1].name], {session_rec.get_inputs()[0].name: img})
-            # import pdb;pdb.set_trace()
             # 获取车牌字符的索引及其最大概率
             index = np.argmax(y_onnx_plate, axis=-1)  # 每个字符的预测索引
-
             # 获取车牌颜色的索引及其最大概率
             index_color = np.argmax(y_onnx_color)  # 颜色预测索引
             color_prob = max(softmax(y_onnx_color[0]))  # 颜色预测的最大概率
-
             # 获取车牌颜色名称
             plate_color = plate_color_list[index_color]
-
             # 解码车牌号码
             plate_no, char_probs = decodePlate(index[0], y_onnx_plate[0])
-
-            # 打印车牌信息
-            print("车牌号码:", plate_no)
-            print("车牌每个字符的预测概率:", char_probs)
-            print("车牌颜色:", plate_color)
-            print("车牌颜色预测的概率:", color_prob)
- 
-
-        #     # Save result details
-        #     result_dict['rect'] = rect
-        #     result_dict['landmarks'] = land_marks.tolist()
-        #     result_dict['plate_no'] = plate_no
-        #     result_dict['roi_height'] = roi_img.shape[0]
-        #     result_dict['plate_color'] = plate_color
-
+            
+            rec_result['plate_no'] = plate_no
+            rec_result['char_probs'] = [float(char_prob) for char_prob in char_probs]
+            rec_result['plate_color'] = plate_color
+            rec_result['color_prob'] = float(color_prob)
+            rec_results.append(rec_result)
         
-        # # Return results
-        # return [each['plate_no'] for each in dict_list]
+        return rec_results 
+        
+
 
 
 # Example usage
@@ -115,6 +106,8 @@ if __name__ == "__main__":
     
     # Perform inference on a single image
     det_result = plate_detector.predict(cv2.imread(args.image_path))
-    plate_recognizer.predict(det_result)
+    print(f'det_result:{det_result}')
+    rec_result = plate_recognizer.predict(det_result)
+    print(f'rec_result:{rec_result}')
 
         

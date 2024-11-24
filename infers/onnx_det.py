@@ -143,14 +143,13 @@ class PlateDetector:
         
         # Step 5: Post-process detection output
         try:
-            rects,landmarks,labels,scores = self.detect_postprocess(y_onnx, r, left, top)
-            # get cap-plate-img
-            roi_imgs = [four_point_transform(img0, land_marks) for land_marks in landmarks]
+            det_results = self.detect_postprocess(img0, y_onnx, r, left, top)
+            
         except Exception as e:
             print(f"Error during post-processing: {e}")
             return None
         # Return results
-        return (rects,landmarks,labels,scores,roi_imgs)
+        return det_results
 
     def detect_preprocess(self, img, img_size):
         """ Pre-process image for detection. """
@@ -160,7 +159,7 @@ class PlateDetector:
         img=img.reshape(1,*img.shape)
         return img,r,left,top
 
-    def detect_postprocess(self,dets,r,left,top,conf_thresh=0.3,iou_thresh=0.5):#检测后处理
+    def detect_postprocess(self,img0, dets,r,left,top,conf_thresh=0.3,iou_thresh=0.5):#检测后处理
         choice = dets[:,:,4]>conf_thresh
         dets=dets[choice]
         dets[:,13:15]*=dets[:,4:5]
@@ -173,11 +172,21 @@ class PlateDetector:
         output=output[reserve_] 
         output = restore_box(output,r,left,top)
         
-        rects = [out[:4].tolist() for out in output]
-        scores = [out[4] for out in output]
-        land_marks = [out[5:13].reshape(4, 2) for out in output]
-        labels = [int(out[13]) for out in output]
-        return rects, land_marks, labels, scores
+        # 转换为字典列表
+        results = [
+            {
+                "rect": out[:4].tolist(),
+                "score": float(out[4]),
+                "land_mark": out[5:13].reshape(4, 2),
+                "label": int(out[13])
+            }
+            for out in output
+        ]
+
+        # 获取 ROI 图片并添加到结果字典中
+        for result in results:
+            result["roi_img"] = four_point_transform(img0, result["land_mark"])
+        return results
 
 # Example usage
 if __name__ == "__main__":
@@ -190,6 +199,6 @@ if __name__ == "__main__":
     plate_detector = PlateDetector(args.model_dir, args.img_size)
     
     # Perform inference on a single image
-    _,_,_,_,scores = plate_detector.predict(cv2.imread(args.image_path))
-    print(scores)
+    results = plate_detector.predict(cv2.imread(args.image_path))
+    print(results)
 

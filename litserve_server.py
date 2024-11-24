@@ -1,31 +1,34 @@
-from infers.onnx_infer import PlateRecognizer
+from infers.onnx_det import PlateDetector
+from infers.onnx_rec import PlateRecognizer
 import litserve as ls
 import argparse
+import cv2
 
 # init config
 parser = argparse.ArgumentParser()
-parser.add_argument('--detect_model', type=str, default='weights/plate_detect.onnx', help='Detection model path')
-parser.add_argument('--rec_model', type=str, default='weights/plate_rec_color.onnx', help='Recognition model path')
-parser.add_argument('--image_path', type=str, default='/path/to/image.jpg', help='Image path')
+parser.add_argument('--model_dir', type=str, default='weights', help='Recognition model path')
+parser.add_argument('--image_path', type=str, default='imgs/moto.png', help='Image path')
 parser.add_argument('--img_size', type=int, default=640, help='Input image size')
-parser.add_argument('--output', type=str, default='./output', help='Output folder path')
 args = parser.parse_args()
 
 class TextClassificationAPI(ls.LitAPI):
     def setup(self, device):
-        self.plate_recognizer = PlateRecognizer(args.detect_model, args.rec_model, args.img_size, args.output)
+        # Create PlateRecognizer instance
+        self.plate_detector = PlateDetector(args.model_dir, args.img_size)
+        # Create PlateRecognizer instance
+        self.plate_recognizer = PlateRecognizer(args.model_dir)
 
     def decode_request(self, request):
         return request["url"]
 
     def predict(self, x):
-        return self.plate_recognizer.infer_single_image(x)
+        # Perform inference on a single image
+        det_result = self.plate_detector.predict(cv2.imread(args.image_path))
+        rec_result = self.plate_recognizer.predict(det_result)
+        return rec_result
 
     def encode_response(self, output):
-        car_plates = []
-        for plate in output:
-            car_plates.append({"plate_no": plate['plate_no'],'plate_color':plate['plate_color']})
-        return car_plates
+        return output
 
 if __name__ == "__main__":
     api = TextClassificationAPI()
