@@ -32,5 +32,5 @@ class TextClassificationAPI(ls.LitAPI):
 
 if __name__ == "__main__":
     api = TextClassificationAPI()
-    server = ls.LitServer(api, workers_per_device=1)
+    server = ls.LitServer(api)
     server.run(port=8100)
