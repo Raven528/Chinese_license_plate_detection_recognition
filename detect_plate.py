@@ -32,7 +32,6 @@ def order_points(pts):                   #四个点按照左上 右上 右下 �
     rect[3] = pts[np.argmax(diff)]
     return rect
 
-
 def four_point_transform(image, pts):                       #透视变换得到车牌小图
     # rect = order_points(pts)
     rect = pts.astype('float32')
@@ -81,7 +80,6 @@ def scale_coords_landmarks(img1_shape, coords, img0_shape, ratio_pad=None):  #�
     # coords[:, 9].clamp_(0, img0_shape[0])  # y5
     return coords
 
-
 def get_plate_rec_landmark(img, xyxy, conf, landmarks, class_num,device,plate_rec_model,is_color=False):  #获取车牌坐标以及四个角点坐标并获取车牌号
     h,w,c = img.shape
     result_dict={}
@@ -122,8 +120,6 @@ def get_plate_rec_landmark(img, xyxy, conf, landmarks, class_num,device,plate_re
     
     return result_dict
 
-
-
 def detect_Recognition_plate(model, orgimg, device,plate_rec_model,img_size,is_color=False):#获取车牌信息
     # Load model
     # img_size = opt_img_size
@@ -138,7 +134,6 @@ def detect_Recognition_plate(model, orgimg, device,plate_rec_model,img_size,is_c
     if r != 1:  # always resize down, only resize up if training with augmentation
         interp = cv2.INTER_AREA if r < 1  else cv2.INTER_LINEAR
         img0 = cv2.resize(img0, (int(w0 * r), int(h0 * r)), interpolation=interp)
-
     imgsz = check_img_size(img_size, s=model.stride.max())  # check img_size  
 
     img = letterbox(img0, new_shape=imgsz)[0]           #检测前处理，图片长宽变为32倍数，比如变为640X640
@@ -225,8 +220,6 @@ def draw_result(orgimg,dict_list,is_color=False):   # 车牌结果画出来
                
     print(result_str)
     return orgimg
-
-
 
 def get_second(capture):
     if capture.isOpened():
