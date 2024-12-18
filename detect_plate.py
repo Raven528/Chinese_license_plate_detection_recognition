@@ -16,7 +16,7 @@ from utils.general import check_img_size, non_max_suppression_face, apply_classi
 from utils.plots import plot_one_box
 from utils.torch_utils import select_device, load_classifier, time_synchronized
 from utils.cv_puttext import cv2ImgAddText
-from plate_recognition.plate_rec import get_plate_result,allFilePath,init_model,cv_imread
+from plate_recognition.plate_rec import get_plate_result, allFilePath, init_model, cv_imread
 # from plate_recognition.plate_cls import cv_imread
 from plate_recognition.double_plate_split_merge import get_split_merge
 
@@ -231,10 +231,10 @@ def get_second(capture):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--detect_model', nargs='+', type=str, default='weights/plate_detect.pt', help='model.pt path(s)')  #检测模型
-    parser.add_argument('--rec_model', type=str, default='weights/plate_rec_color.pth', help='model.pt path(s)')#车牌识别+颜色识别模型
+    parser.add_argument('--detect_model', nargs='+', type=str, default='weights/det.pth', help='model.pt path(s)')  #检测模型
+    parser.add_argument('--rec_model', type=str, default='weights/rec.pth', help='model.pt path(s)')#车牌识别+颜色识别模型
     parser.add_argument('--is_color',type=bool,default=True,help='plate color')      #是否识别颜色
-    parser.add_argument('--image_path', type=str, default='imgs', help='source')     #图片路径
+    parser.add_argument('--image_path', type=str, default='demo.jpg', help='source')     #图片路径
     parser.add_argument('--img_size', type=int, default=640, help='inference size (pixels)')  #网络输入图片大小
     parser.add_argument('--output', type=str, default='result', help='source')               #图片结果保存的位置
     parser.add_argument('--video', type=str, default='', help='source')                       #视频的路径
@@ -249,6 +249,8 @@ if __name__ == '__main__':
 
     detect_model = load_model(opt.detect_model, device)  #初始化检测模型
     plate_rec_model=init_model(device,opt.rec_model,is_color=opt.is_color)      #初始化识别模型
+    # detect_model = torch.load(opt.detect_model, device)
+    # plate_rec_model = torch.load(opt.rec_model, device)
     #算参数量
     total = sum(p.numel() for p in detect_model.parameters())
     total_1 = sum(p.numel() for p in plate_rec_model.parameters())

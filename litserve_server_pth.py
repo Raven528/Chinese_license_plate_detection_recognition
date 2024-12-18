@@ -1,15 +1,16 @@
-import os
 import cv2
 import torch
 import argparse
 import litserve as ls
 
-from infers.pth_det import PlateDetection, PlateRecognition
+from infers.detect_plate import detect_Recognition_plate, load_model
+from plate_recognition.plate_rec import init_model
 
 # init config
 parser = argparse.ArgumentParser()
-parser.add_argument('--model_dir', type=str, default='weights', help='Recognition model path')
-parser.add_argument('--image_path', type=str, default='imgs/moto.png', help='Image path')
+parser.add_argument('--detect_model', nargs='+', type=str, default='weights/plate_detect.pt', help='model.pt path(s)')  #检测模型
+parser.add_argument('--rec_model', type=str, default='weights/plate_rec_color.pth', help='model.pt path(s)')#车牌识别+颜色识别模型
+parser.add_argument('--image_path', type=str, default='demo.jpg', help='')
 parser.add_argument('--img_size', type=int, default=640, help='Input image size')
 args = parser.parse_args()
 
@@ -17,18 +18,19 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class TextClassificationAPI(ls.LitAPI):
     def setup(self, device):
-        # Create PlateRecognizer instance
-        self.plate_detector = PlateDetection(os.path.join(args.model_dir, 'det.pth'),device,args.img_size)
-        # Create PlateRecognizer instance
-        self.plate_recognizer = PlateRecognition(os.path.join(args.model_dir, 'rec.pth'),device,args.model_dir)
+        self.detect_model = load_model(args.detect_model, device)  #初始化检测模型
+        self.plate_rec_model=init_model(device, args.rec_model, is_color=True)      #初始化识别模型
+        self.device = device
 
     def decode_request(self, request):
+        self.img = cv2.imread(args.image_path)
         return request["url"]
 
     def predict(self, x):
-        # Perform inference on a single image
-        rec_result = self.plate_recognizer.infer(cv2.imread(args.image_path), self.plate_detector)
-        return rec_result
+        dict_list=detect_Recognition_plate(self.detect_model, self.img, self.device,\
+                                           self.plate_rec_model, args.img_size, is_color=True)
+        result = max(dict_list, key=lambda x: x['detect_conf']) if dict_list else {}
+        return result
 
     def encode_response(self, output):
         return output

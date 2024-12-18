@@ -2,7 +2,6 @@
 import os
 import sys
 import cv2
-import math
 import time
 import copy
 import torch
@@ -15,7 +14,7 @@ from ultralytics.utils.ops import xywh2xyxy
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(project_root)
 
-color=['黑色','蓝色','绿色','白色','黄色']    
+color=['黑色', '蓝色', '绿色', '白色', '黄色']    
 plateName=r"#京沪津渝冀晋蒙辽吉黑苏浙皖闽赣鲁豫鄂湘粤桂琼川贵云藏陕甘青宁新学警港澳挂使领民航危0123456789ABCDEFGHJKLMNPQRSTUVWXYZ险品"
 mean_value,std_value=(0.588,0.193)
 
@@ -340,7 +339,7 @@ def main():
     parser.add_argument('--detect_model', nargs='+', type=str, default='weights/det.pth', help='model.pt path(s)')
     parser.add_argument('--rec_model', type=str, default='weights/rec.pth', help='model.pt path(s)')
     parser.add_argument('--is_color', type=bool, default=True, help='plate color recognition')
-    parser.add_argument('--image_path', type=str, default='imgs/moto.png', help='source image path')
+    parser.add_argument('--image_path', type=str, default='demo.jpg', help='source image path')
     parser.add_argument('--img_size', type=int, default=640, help='input image size')
     opt = parser.parse_args()
 
