@@ -9,66 +9,20 @@ import torch
 import argparse
 import torchvision
 import numpy as np
+from torchvision.ops.boxes import box_iou
+from ultralytics.utils.ops import xywh2xyxy
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(project_root)
-
-from models.experimental import attempt_load
-from plate_recognition.plate_rec import init_model
 
 color=['黑色','蓝色','绿色','白色','黄色']    
 plateName=r"#京沪津渝冀晋蒙辽吉黑苏浙皖闽赣鲁豫鄂湘粤桂琼川贵云藏陕甘青宁新学警港澳挂使领民航危0123456789ABCDEFGHJKLMNPQRSTUVWXYZ险品"
 mean_value,std_value=(0.588,0.193)
 
-def make_divisible(x, divisor):
-    # Returns x evenly divisible by divisor
-    return math.ceil(x / divisor) * divisor
-
-def check_img_size(img_size, s=32):
-    # Verify img_size is a multiple of stride s
-    new_size = make_divisible(img_size, int(s))  # ceil gs-multiple
-    if new_size != img_size:
-        print('WARNING: --img-size %g must be multiple of max stride %g, updating to %g' % (img_size, s, new_size))
-    return new_size
-
+from ultralytics.utils.checks import check_imgsz
 def cv_imread(path):  #可以读取中文路径的图片
     img=cv2.imdecode(np.fromfile(path,dtype=np.uint8),-1)
     return img
-
-def xywh2xyxy(x):
-    # Convert nx4 boxes from [x, y, w, h] to [x1, y1, x2, y2] where xy1=top-left, xy2=bottom-right
-    y = x.clone() if isinstance(x, torch.Tensor) else np.copy(x)
-    y[:, 0] = x[:, 0] - x[:, 2] / 2  # top left x
-    y[:, 1] = x[:, 1] - x[:, 3] / 2  # top left y
-    y[:, 2] = x[:, 0] + x[:, 2] / 2  # bottom right x
-    y[:, 3] = x[:, 1] + x[:, 3] / 2  # bottom right y
-    return y
-
-def box_iou(box1, box2):
-    # https://github.com/pytorch/vision/blob/master/torchvision/ops/boxes.py
-    """
-    Return intersection-over-union (Jaccard index) of boxes.
-    Both sets of boxes are expected to be in (x1, y1, x2, y2) format.
-    Arguments:
-        box1 (Tensor[N, 4])
-        box2 (Tensor[M, 4])
-    Returns:
-        iou (Tensor[N, M]): the NxM matrix containing the pairwise
-            IoU values for every element in boxes1 and boxes2
-    """
-
-    def box_area(box):
-        # box = 4xn
-        return (box[2] - box[0]) * (box[3] - box[1])
-
-    area1 = box_area(box1.T)
-    area2 = box_area(box2.T)
-
-    # inter(N,M) = (rb(N,M,2) - lt(N,M,2)).clamp(0).prod(2)
-    inter = (torch.min(box1[:, None, 2:], box2[:, 2:]) -
-             torch.max(box1[:, None, :2], box2[:, :2])).clamp(0).prod(2)
-    # iou = inter / (area1 + area2 - inter)
-    return inter / (area1[:, None] + area2 - inter)
 
 def non_max_suppression_face(prediction, conf_thres=0.25, iou_thres=0.45, classes=None, agnostic=False, labels=()):
     """Performs Non-Maximum Suppression (NMS) on inference results
@@ -150,28 +104,7 @@ def non_max_suppression_face(prediction, conf_thres=0.25, iou_thres=0.45, classe
 
     return output
 
-def clip_coords(boxes, img_shape):
-    # Clip bounding xyxy bounding boxes to image shape (height, width)
-    boxes[:, 0].clamp_(0, img_shape[1])  # x1
-    boxes[:, 1].clamp_(0, img_shape[0])  # y1
-    boxes[:, 2].clamp_(0, img_shape[1])  # x2
-    boxes[:, 3].clamp_(0, img_shape[0])  # y2
-
-
-def scale_coords(img1_shape, coords, img0_shape, ratio_pad=None):
-    # Rescale coords (xyxy) from img1_shape to img0_shape
-    if ratio_pad is None:  # calculate from img0_shape
-        gain = min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])  # gain  = old / new
-        pad = (img1_shape[1] - img0_shape[1] * gain) / 2, (img1_shape[0] - img0_shape[0] * gain) / 2  # wh padding
-    else:
-        gain = ratio_pad[0][0]
-        pad = ratio_pad[1]
-
-    coords[:, [0, 2]] -= pad[0]  # x padding
-    coords[:, [1, 3]] -= pad[1]  # y padding
-    coords[:, :4] /= gain
-    clip_coords(coords, img0_shape)
-    return coords
+from ultralytics.utils.ops import scale_coords
 
 def decodePlate(preds):
     pre=0
@@ -312,7 +245,8 @@ class PlateDetection:
 
     def load_model(self, model_path):
         """ Load the plate detection model. """
-        model = attempt_load(model_path, map_location=self.device)
+        # model = attempt_load(model_path, map_location=self.device)
+        model = torch.load(model_path, map_location=self.device)
         return model
 
     def infer(self, img):
@@ -324,8 +258,7 @@ class PlateDetection:
         if r != 1:  # always resize down, only resize up if training with augmentation
             interp = cv2.INTER_AREA if r < 1 else cv2.INTER_LINEAR
             img0 = cv2.resize(img0, (int(w0 * r), int(h0 * r)), interpolation=interp)
-
-        imgsz = check_img_size(self.img_size, s=self.model.stride.max())  # check img_size
+        imgsz = check_imgsz(self.img_size, stride=self.model.stride.max())  # check img_size
         img = letterbox(img0, new_shape=imgsz)[0]
         img = img[:, :, ::-1].transpose(2, 0, 1).copy()
         img = torch.from_numpy(img).to(self.device).float() / 255.0
@@ -344,7 +277,9 @@ class PlateRecognition:
 
     def init_model(self, model_path):
         """ Initialize the plate recognition model. """
-        return init_model(self.device, model_path, is_color=self.is_color)
+        # return init_model(self.device, model_path, is_color=self.is_color)
+        model = torch.load(model_path, map_location=self.device)
+        return model
     
     def get_plate_rec_landmark(self, img, xyxy, conf, landmarks, class_num):
         """ Extract the plate and recognize the plate number. """
@@ -367,10 +302,10 @@ class PlateRecognition:
             plate_number, rec_prob = get_plate_result(roi_img, self.device, self.model, is_color=self.is_color)
 
         result_dict['rect'] = [x1, y1, x2, y2]
-        result_dict['detect_conf'] = conf
+        result_dict['detect_conf'] = conf.item()
         result_dict['landmarks'] = landmarks_np.tolist()
         result_dict['plate_no'] = plate_number
-        result_dict['rec_conf'] = rec_prob
+        result_dict['rec_conf'] = rec_prob.tolist()
         result_dict['roi_height'] = roi_img.shape[0]
 
         if self.is_color:
@@ -402,8 +337,8 @@ class PlateRecognition:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--detect_model', nargs='+', type=str, default='weights/plate_detect.pt', help='model.pt path(s)')
-    parser.add_argument('--rec_model', type=str, default='weights/plate_rec_color.pth', help='model.pt path(s)')
+    parser.add_argument('--detect_model', nargs='+', type=str, default='weights/det.pth', help='model.pt path(s)')
+    parser.add_argument('--rec_model', type=str, default='weights/rec.pth', help='model.pt path(s)')
     parser.add_argument('--is_color', type=bool, default=True, help='plate color recognition')
     parser.add_argument('--image_path', type=str, default='imgs/moto.png', help='source image path')
     parser.add_argument('--img_size', type=int, default=640, help='input image size')
